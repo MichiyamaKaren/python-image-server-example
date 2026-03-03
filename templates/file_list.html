@@ -4,6 +4,68 @@
 <head>
     <title>Files in {{ path }}</title>
     <style type="text/css">
+        body {
+            margin: 0;
+            padding: 10px;
+            font-family: sans-serif;
+        }
+
+        .toolbar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .toolbar button {
+            padding: 6px 14px;
+            cursor: pointer;
+            border-radius: 4px;
+            border: 1px solid #999;
+            font-size: 14px;
+        }
+
+        #btn-select-mode {
+            background: #f0f0f0;
+        }
+
+        #btn-select-mode.active {
+            background: #333;
+            color: #fff;
+            border-color: #333;
+        }
+
+        #action-bar {
+            display: none;
+            align-items: center;
+            gap: 8px;
+        }
+
+        #action-bar.visible {
+            display: flex;
+        }
+
+        #btn-select-all {
+            background: #f0f0f0;
+        }
+
+        #btn-download {
+            background: #2196F3;
+            color: #fff;
+            border-color: #1976D2;
+        }
+
+        #btn-delete {
+            background: #f44336;
+            color: #fff;
+            border-color: #d32f2f;
+        }
+
+        #selected-count {
+            font-size: 14px;
+            color: #555;
+        }
+
         .image-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, 200px);
@@ -22,6 +84,41 @@
             position: relative;
             margin: 0;
             width: 200px;
+        }
+
+        /* selection mode */
+        .select-mode figure {
+            cursor: pointer;
+        }
+
+        .select-mode figure img {
+            cursor: pointer;
+        }
+
+        figure.selected img {
+            outline: 4px solid #2196F3;
+            opacity: 0.85;
+        }
+
+        .check-mark {
+            display: none;
+            position: absolute;
+            top: 6px;
+            left: 6px;
+            width: 24px;
+            height: 24px;
+            background: #2196F3;
+            border-radius: 50%;
+            color: #fff;
+            font-size: 15px;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        figure.selected .check-mark {
+            display: flex;
         }
 
         #image-overlay {
@@ -50,19 +147,12 @@
             position: absolute;
             right: 10px;
             bottom: 10px;
-            /* ボーダー設定 */
             border: 2px solid #fff;
-            /* 円形にする */
             border-radius: 50%;
-            /* 背景透明 */
             background-color: transparent;
-            /* フォントサイズ */
             font-size: 16px;
-            /* 幅 */
             width: 30px;
-            /* 高さ */
             height: 30px;
-            /* カーソルをポインタに */
             cursor: pointer;
         }
 
@@ -75,7 +165,6 @@
             width: 100%;
             height: 100%;
             overflow: auto;
-            /* 半透明背景 */
             background-color: rgba(0, 0, 0, 0.4);
         }
 
@@ -98,8 +187,150 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', function () {
+            let selectMode = false;
+            let lastClickedIndex = -1;
+            const selected = new Set();
+
+            const grid = document.querySelector('.image-grid');
+            const btnSelectMode = document.getElementById('btn-select-mode');
+            const btnSelectAll = document.getElementById('btn-select-all');
+            const btnDownload = document.getElementById('btn-download');
+            const btnDelete = document.getElementById('btn-delete');
+            const actionBar = document.getElementById('action-bar');
+            const selectedCount = document.getElementById('selected-count');
+
+            function updateActionBar() {
+                selectedCount.textContent = selected.size + ' 项已选';
+                actionBar.classList.toggle('visible', selected.size > 0);
+            }
+
+            function toggleSelectMode(on) {
+                selectMode = on;
+                btnSelectMode.classList.toggle('active', on);
+                grid.classList.toggle('select-mode', on);
+                if (!on) {
+                    selected.clear();
+                    lastClickedIndex = -1;
+                    document.querySelectorAll('figure.selected').forEach(f => f.classList.remove('selected'));
+                    actionBar.classList.remove('visible');
+                }
+            }
+
+            btnSelectMode.addEventListener('click', function () {
+                toggleSelectMode(!selectMode);
+            });
+
+            btnSelectAll.addEventListener('click', function () {
+                const figures = document.querySelectorAll('.image-grid figure');
+                const allSelected = figures.length === selected.size;
+                figures.forEach(fig => {
+                    const path = fig.dataset.path;
+                    if (allSelected) {
+                        fig.classList.remove('selected');
+                        selected.delete(path);
+                    } else {
+                        fig.classList.add('selected');
+                        selected.add(path);
+                    }
+                });
+                updateActionBar();
+            });
+
+            btnDownload.addEventListener('click', function () {
+                selected.forEach(path => {
+                    const a = document.createElement('a');
+                    a.href = '/files/' + path;
+                    a.download = path.split('/').pop();
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                });
+            });
+
+            btnDelete.addEventListener('click', async function () {
+                if (!confirm('确认删除选中的 ' + selected.size + ' 个文件？')) return;
+                const paths = Array.from(selected);
+                const failed = [];
+                for (const path of paths) {
+                    const resp = await fetch('/files/' + path, { method: 'DELETE' });
+                    if (resp.ok) {
+                        const fig = document.querySelector('figure[data-path="' + path + '"]');
+                        if (fig) fig.remove();
+                        selected.delete(path);
+                    } else {
+                        failed.push(path);
+                    }
+                }
+                updateActionBar();
+                if (failed.length) alert('以下文件删除失败：\n' + failed.join('\n'));
+            });
+
+            // figure click: select mode / ctrl+click / shift+click
+            const figures = Array.from(document.querySelectorAll('.image-grid figure'));
+
+            function setFigureSelected(fig, on) {
+                const path = fig.dataset.path;
+                if (on) { selected.add(path); fig.classList.add('selected'); }
+                else    { selected.delete(path); fig.classList.remove('selected'); }
+            }
+
+            function isFigureSelected(fig) {
+                return fig.classList.contains('selected');
+            }
+
+            figures.forEach((fig, idx) => {
+                fig.addEventListener('click', function (e) {
+                    if (e.target.classList.contains('info-button')) return;
+
+                    const isModified = e.ctrlKey || e.metaKey || e.shiftKey;
+
+                    // plain click outside select mode → open overlay (handled below)
+                    if (!selectMode && !isModified) return;
+
+                    e.preventDefault();   // prevent text selection on shift-click
+                    e.stopPropagation();
+
+                    // auto-enter select mode on ctrl/meta click
+                    if (!selectMode) toggleSelectMode(true);
+
+                    if (e.shiftKey && lastClickedIndex !== -1) {
+                        if (isFigureSelected(fig) === !(isFigureSelected(figures[lastClickedIndex]))) {
+                            // range select from lastClickedIndex to idx
+                            const lo = Math.min(lastClickedIndex, idx);
+                            const hi = Math.max(lastClickedIndex, idx);
+                            for (let i = lo; i <= hi; i++) {setFigureSelected(figures[i], isFigureSelected(figures[lastClickedIndex])); }
+                        }
+                        lastClickedIndex = -1;
+                    } else {
+                        // toggle this figure
+                        setFigureSelected(this, !(isFigureSelected(fig)));
+                        lastClickedIndex = idx;
+                    }
+
+                    updateActionBar();
+                });
+            });
+
+            // Open overlay when thumbnail clicked (only outside select mode)
+            document.querySelectorAll('.image-grid img').forEach(img => {
+                img.addEventListener('click', function (e) {
+                    if (selectMode) return;
+                    document.getElementById('overlay-img').src = this.src;
+                    document.getElementById('image-overlay').classList.add('active');
+                });
+            });
+
+            // Close overlay when clicking outside image
+            document.getElementById('image-overlay').addEventListener('click', function (e) {
+                if (e.target === this) {
+                    this.classList.remove('active');
+                }
+            });
+
+            // Info button & modal
             document.querySelectorAll('.info-button').forEach(button => {
-                button.addEventListener('click', function () {
+                button.addEventListener('click', function (e) {
+                    e.stopPropagation();
                     this.nextElementSibling.style.display = 'block';
                 });
             });
@@ -117,31 +348,29 @@
                     this.closest('.modal').style.display = 'none';
                 });
             });
-
-            document.querySelectorAll('.image-grid img').forEach(img => {
-                img.addEventListener('click', function () {
-                    document.getElementById('overlay-img').src = this.src;
-                    document.getElementById('image-overlay').classList.add('active');
-                });
-            });
-
-            document.getElementById('image-overlay').addEventListener('click', function (e) {
-                if (e.target === this) {
-                    this.classList.remove('active');
-                }
-            });
-
         });
     </script>
 </head>
 
 <body>
     <h1>Files in {{ path }}</h1>
+
+    <div class="toolbar">
+        <button id="btn-select-mode">选择</button>
+        <div id="action-bar">
+            <button id="btn-select-all">全选 / 取消全选</button>
+            <button id="btn-download">下载</button>
+            <button id="btn-delete">删除</button>
+            <span id="selected-count"></span>
+        </div>
+    </div>
+
     <div class="image-grid">
         {% for file in files %}
-        <figure>
+        <figure data-path="{{ file.filename }}">
+            <span class="check-mark">&#10003;</span>
             <img src="/files/{{ file.filename }}" alt="{{ file.filename }}">
-            <button class="info-button">i</button> <!-- 情報ボタン -->
+            <button class="info-button">i</button>
             <div class="modal">
                 <div class="modal-content">
                     <span class="close-button">&times;</span>
@@ -151,9 +380,11 @@
         </figure>
         {% endfor %}
     </div>
+
     <div id="image-overlay">
         <img id="overlay-img" src="" alt="">
     </div>
+
     <h2>Directories</h2>
     <ul>
         {% for dir in dirs %}

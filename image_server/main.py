@@ -83,6 +83,19 @@ async def read_files_or_download(request: Request, path: str):
         raise HTTPException(status_code=404, detail="Path not found")
 
 
+@app.delete("/files/{path:path}")
+async def delete_file(path: str):
+    if not is_safe_path(BASE_DIRECTORY, path):
+        raise HTTPException(status_code=403, detail="Access denied")
+    full_path = os.path.join(BASE_DIRECTORY, path)
+    if not os.path.isfile(full_path):
+        raise HTTPException(status_code=404, detail="File not found")
+    if not is_image_file(full_path):
+        raise HTTPException(status_code=400, detail="Not an image file")
+    os.remove(full_path)
+    return {"status": "deleted"}
+
+
 @app.get("/metadata/{filepath:path}")
 async def get_image_metadata(filepath: str):
     if not is_safe_path(BASE_DIRECTORY, filepath) or not is_image_file(filepath):
