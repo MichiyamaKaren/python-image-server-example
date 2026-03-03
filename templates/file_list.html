@@ -141,6 +141,29 @@
             object-fit: contain;
             cursor: default;
         }
+        #overlay-actions {
+            position: fixed;
+            top: 16px;
+            right: 16px;
+            display: flex;
+            gap: 8px;
+            z-index: 101;
+        }
+        #overlay-actions button {
+            padding: 6px 14px;
+            border-radius: 4px;
+            border: none;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        #overlay-btn-download {
+            background: #2196F3;
+            color: #fff;
+        }
+        #overlay-btn-delete {
+            background: #f44336;
+            color: #fff;
+        }
 
         .info-button {
             color: #fff;
@@ -278,7 +301,7 @@
                 return fig.classList.contains('selected');
             }
 
-            figures.forEach((fig, idx) => {
+            figures.forEach((fig) => {
                 fig.addEventListener('click', function (e) {
                     if (e.target.classList.contains('info-button')) return;
 
@@ -289,6 +312,8 @@
 
                     e.preventDefault();   // prevent text selection on shift-click
                     e.stopPropagation();
+
+                    const idx = figures.indexOf(fig);
 
                     // auto-enter select mode on ctrl/meta click
                     if (!selectMode) toggleSelectMode(true);
@@ -304,27 +329,88 @@
                     } else {
                         // toggle this figure
                         setFigureSelected(this, !(isFigureSelected(fig)));
-                        lastClickedIndex = idx;
+                        if (e.shiftKey) {
+                            lastClickedIndex = idx;
+                        }
                     }
 
                     updateActionBar();
                 });
             });
 
-            // Open overlay when thumbnail clicked (only outside select mode)
-            document.querySelectorAll('.image-grid img').forEach(img => {
-                img.addEventListener('click', function (e) {
+            // Open overlay when thumbnail clicked (only outside select mode, no modifier keys)
+            let currentOverlayIndex = -1;
+            const overlay = document.getElementById('image-overlay');
+            const overlayImg = document.getElementById('overlay-img');
+            const overlayActions = document.getElementById('overlay-actions');
+
+            function overlayCurrentPath() {
+                return figures[currentOverlayIndex].dataset.path;
+            }
+
+            function openOverlay(idx) {
+                currentOverlayIndex = idx;
+                overlayImg.src = figures[idx].querySelector('img').src;
+                overlay.classList.add('active');
+                overlayActions.style.display = 'flex';
+            }
+
+            function closeOverlay() {
+                overlay.classList.remove('active');
+                overlayActions.style.display = 'none';
+            }
+
+            document.getElementById('overlay-btn-download').addEventListener('click', function (e) {
+                e.stopPropagation();
+                const path = overlayCurrentPath();
+                const a = document.createElement('a');
+                a.href = '/files/' + path;
+                a.download = path.split(/[/\\]/).pop();
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            });
+
+            document.getElementById('overlay-btn-delete').addEventListener('click', async function (e) {
+                e.stopPropagation();
+                const path = overlayCurrentPath();
+                if (!confirm('确认删除该文件？')) return;
+                const resp = await fetch('/files/' + path, { method: 'DELETE' });
+                if (resp.ok) {
+                    const fig = figures.splice(currentOverlayIndex, 1)[0];
+                    fig.remove();
+                    selected.delete(path);
+                    updateActionBar();
+                    if (figures.length === 0) { closeOverlay(); return; }
+                    openOverlay(currentOverlayIndex % figures.length);
+                } else {
+                    alert('删除失败');
+                }
+            });
+
+            figures.forEach((fig) => {
+                fig.querySelector('img').addEventListener('click', function (e) {
                     if (selectMode) return;
-                    document.getElementById('overlay-img').src = this.src;
-                    document.getElementById('image-overlay').classList.add('active');
+                    if (e.ctrlKey || e.metaKey || e.shiftKey) return;
+                    openOverlay(figures.indexOf(fig));
                 });
             });
 
-            // Close overlay when clicking outside image
-            document.getElementById('image-overlay').addEventListener('click', function (e) {
-                if (e.target === this) {
-                    this.classList.remove('active');
+            // Arrow key navigation in overlay
+            document.addEventListener('keydown', function (e) {
+                if (!document.getElementById('image-overlay').classList.contains('active')) return;
+                if (e.key === 'ArrowRight') {
+                    openOverlay((currentOverlayIndex + 1) % figures.length);
+                } else if (e.key === 'ArrowLeft') {
+                    openOverlay((currentOverlayIndex - 1 + figures.length) % figures.length);
+                } else if (e.key === 'Escape') {
+                    closeOverlay();
                 }
+            });
+
+            // Close overlay when clicking outside image
+            overlay.addEventListener('click', function (e) {
+                if (e.target === this) closeOverlay();
             });
 
             // Info button & modal
@@ -383,6 +469,10 @@
 
     <div id="image-overlay">
         <img id="overlay-img" src="" alt="">
+    </div>
+    <div id="overlay-actions">
+        <button id="overlay-btn-download">下载</button>
+        <button id="overlay-btn-delete">删除</button>
     </div>
 
     <h2>Directories</h2>
