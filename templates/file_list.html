@@ -6,23 +6,43 @@
     <style type="text/css">
         .image-grid {
             display: grid;
-            /* 3列のグリッドを作成 */
-            grid-template-columns: repeat(3, 1fr);
-            /* グリッドアイテム間の隙間 */
+            grid-template-columns: repeat(auto-fill, 200px);
             grid-gap: 10px;
         }
 
         .image-grid img {
-            /* 画像をグリッドセルに合わせる */
-            width: 100%;
-            /* 画像の縦横比を維持 */
-            height: auto;
+            width: 200px;
+            height: 200px;
+            object-fit: cover;
+            cursor: pointer;
+            display: block;
         }
 
         .image-grid figure {
             position: relative;
-            /* 余白を削除 */
             margin: 0;
+            width: 200px;
+        }
+
+        #image-overlay {
+            display: none;
+            position: fixed;
+            z-index: 100;
+            left: 0; top: 0;
+            width: 100%; height: 100%;
+            background-color: rgba(0, 0, 0, 0.85);
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+        #image-overlay.active {
+            display: flex;
+        }
+        #overlay-img {
+            max-width: 90vw;
+            max-height: 90vh;
+            object-fit: contain;
+            cursor: default;
         }
 
         .info-button {
@@ -98,6 +118,19 @@
                 });
             });
 
+            document.querySelectorAll('.image-grid img').forEach(img => {
+                img.addEventListener('click', function () {
+                    document.getElementById('overlay-img').src = this.src;
+                    document.getElementById('image-overlay').classList.add('active');
+                });
+            });
+
+            document.getElementById('image-overlay').addEventListener('click', function (e) {
+                if (e.target === this) {
+                    this.classList.remove('active');
+                }
+            });
+
         });
     </script>
 </head>
@@ -107,9 +140,7 @@
     <div class="image-grid">
         {% for file in files %}
         <figure>
-            <a href="/files/{{ file.filename }}">
-                <img src="/files/{{ file.filename }}" alt="{{ file.filename }}">
-            </a>
+            <img src="/files/{{ file.filename }}" alt="{{ file.filename }}">
             <button class="info-button">i</button> <!-- 情報ボタン -->
             <div class="modal">
                 <div class="modal-content">
@@ -119,6 +150,9 @@
             </div>
         </figure>
         {% endfor %}
+    </div>
+    <div id="image-overlay">
+        <img id="overlay-img" src="" alt="">
     </div>
     <h2>Directories</h2>
     <ul>
