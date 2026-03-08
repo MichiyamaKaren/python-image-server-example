@@ -1,6 +1,23 @@
 document.addEventListener('DOMContentLoaded', function () {
     const urlPath = window.location.pathname.replace(/^\/files\/?/, '');
 
+    // ── 设置父目录链接 ──────────────────────────────────────────────────────────
+    const parentLink = document.getElementById('parent-link');
+    if (parentLink) {
+        // 计算父目录路径
+        let parentPath = '';
+        if (urlPath) {
+            const pathParts = urlPath.split('/').filter(p => p);
+            if (pathParts.length > 0) {
+                pathParts.pop(); // 移除最后一部分
+                parentPath = pathParts.join('/');
+            }
+        }
+        // 设置链接
+        parentLink.href = '/files/' + parentPath;
+        parentLink.textContent = parentPath ? '返回上级目录' : '返回根目录';
+    }
+
     // ── state ──────────────────────────────────────────────────────────────────
     let selectMode = false;
     let lastClickedFig = null;
